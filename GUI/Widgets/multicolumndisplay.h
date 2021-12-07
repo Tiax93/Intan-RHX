@@ -107,7 +107,7 @@ private:
     WaveformDisplayManager* waveformManager;
     vector<int> numRefreshZones;
 
-    static const int MaxNumColumns = 10;
+    const int MaxNumColumns = 10;
     QList<WaveformDisplayColumn*> displayColumns;
 
     int tScaleFormerIndex;
