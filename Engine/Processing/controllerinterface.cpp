@@ -1009,22 +1009,32 @@ void ControllerInterface::runControllerSilently(double nSeconds, QProgressDialog
     }
 }
 
-float ControllerInterface::measureRmsLevel(string waveName, double timeSec) const
+float ControllerInterface::measureRmsLevel(string waveName, double timeSec) const //---
 {
     int numSamples = round(state->sampleRate->getNumericValue() * timeSec);
     float* waveform = new float [numSamples];
     GpuWaveformAddress gpuWaveformAddress = waveformFifo->getGpuWaveformAddress(waveName);
     waveformFifo->copyGpuAmplifierData(WaveformFifo::ReaderDisplay, waveform, gpuWaveformAddress, -numSamples, numSamples);
 
-    // Calculate RMS value of waveform.
-    float sumOfSquares = 0.0;
-    for (int i = 0; i < numSamples; ++i) {
-        sumOfSquares += waveform[i] * waveform[i];
+    float rmsLevel;
+    if (false) {
+        // Calculate RMS value of waveform.
+        float sumOfSquares = 0.0;
+        for (int i = 0; i < numSamples; ++i) {
+            sumOfSquares += waveform[i] * waveform[i];
+        }
+        rmsLevel = sqrt(sumOfSquares / (float)numSamples);
     }
-    float rmsLevel = sqrt(sumOfSquares / (float)numSamples);
+    else
+    {
+        // Calculate RMS value of waveform based on signal median.
+        // float* first(&waveform[0]);
+        // float* last(first + 4);
+        sort(&waveform[0], &waveform[0]+numSamples, [](int i, int j) { return abs(i) < abs(j); });
+        rmsLevel = abs(waveform[int(qFloor(numSamples/2))]) * 1.4826;
+    }
 
     delete [] waveform;
-
     return rmsLevel;
 }
 
@@ -1044,7 +1054,7 @@ void ControllerInterface::setAllSpikeDetectionThresholds()
     } else {
         double rmsMultiple = state->rmsMultipleThreshold->getValue();
         if (state->negativeRelativeThreshold->getValue()) rmsMultiple *= -1;
-        double numSecondsToMeasure = 3.0;
+        double numSecondsToMeasure = 5.0;
 
         QProgressDialog* progress = new QProgressDialog(QObject::tr("Measuring Noise Floor to Calculate Thresholds"), QString(), 0, 1);
         runControllerSilently(numSecondsToMeasure + 1.0, progress);  // Add one second at beginning so we ignore starting transients.
