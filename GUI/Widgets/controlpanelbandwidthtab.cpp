@@ -54,7 +54,8 @@ ControlPanelBandwidthTab::ControlPanelBandwidthTab(ControllerInterface* controll
     hpOrderLabel(nullptr),
     hpOrderSpinBox(nullptr),
     hpCutoffLineEdit(nullptr),
-    viewFiltersButton(nullptr)
+    viewFiltersButton(nullptr),
+    blankingWindowSpinBox(nullptr) //---
 {
     changeBandwidthButton = new QPushButton(tr("Change Bandwidth"), this);
     advancedBandwidthButton = new QPushButton(tr("Advanced"), this);
@@ -143,8 +144,23 @@ ControlPanelBandwidthTab::ControlPanelBandwidthTab(ControllerInterface* controll
     highPassLayout->addWidget(hpCutoffLineEdit);
     highPassLayout->addWidget(new QLabel(tr("Hz")));
 
+    //---
+    blankingWindowSpinBox = new QSpinBox(this);
+    state->blankingWindow->setupSpinBox(blankingWindowSpinBox);
+    connect(blankingWindowSpinBox, SIGNAL(valueChanged(int)), this, SLOT(changeBlankingWindow(int)));
+
+    QHBoxLayout *blankingWindowLayout = new QHBoxLayout;
+    blankingWindowLayout->addWidget(new QLabel(tr("Post-stimulation blanking window"), this));
+    blankingWindowLayout->addWidget(blankingWindowSpinBox);
+    blankingWindowLayout->addWidget(new QLabel(tr("ms")));
+
+    QVBoxLayout *hpbwGroupBox = new QVBoxLayout;
+    hpbwGroupBox->addLayout(highPassLayout);
+    hpbwGroupBox->addLayout(blankingWindowLayout);
+
     QGroupBox *highPassGroupBox = new QGroupBox(tr("High Pass Filter (Spike Band)"), this);
-    highPassGroupBox->setLayout(highPassLayout);
+    highPassGroupBox->setLayout(hpbwGroupBox);
+    //---
 
     viewFiltersButton = new QPushButton(tr("View Frequency Response"), this);
     connect(viewFiltersButton, SIGNAL(clicked(bool)), this, SLOT(viewFiltersSlot()));
@@ -218,15 +234,18 @@ void ControlPanelBandwidthTab::updateFromState()
     hpTypeComboBox->setCurrentIndex(state->highType->getIndex());
     hpOrderSpinBox->setValue(state->highOrder->getValue());
     hpCutoffLineEdit->setText(state->highSWCutoffFreq->getValueString());
+    blankingWindowSpinBox->setValue(state->blankingWindow->getValue()); //---
 
     if (state->recording) {
         hpTypeComboBox->setEnabled(false);
         hpOrderSpinBox->setEnabled(false);
         hpCutoffLineEdit->setEnabled(false);
+        blankingWindowSpinBox->setEnabled(false); //---
     } else {
         hpTypeComboBox->setEnabled(true);
         hpOrderSpinBox->setEnabled(true);
         hpCutoffLineEdit->setEnabled(true);
+        blankingWindowSpinBox->setEnabled(true); //---
     }
 }
 

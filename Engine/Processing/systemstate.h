@@ -263,6 +263,7 @@ public:
     IntRangeItem *highOrder;
     DiscreteItemList *highType;
     DoubleRangeItem *highSWCutoffFreq;
+    IntRangeItem *blankingWindow; //---
 
     // Display options
     DiscreteItemList* filterDisplay1;

@@ -143,6 +143,9 @@ protected:
     uint16_t* parsedPrevHighOriginal;
     uint16_t* parsedPrevHigh;
     uint64_t* inputIndex, outputIndex, spikeIndex;
+    //---
+    int blankingWindow;
+    int blankSample;
 
 private:
     void calculateNotchConstants();

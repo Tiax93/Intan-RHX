@@ -28,6 +28,9 @@
 //
 //------------------------------------------------------------------------------
 
+#include <iostream>
+#include <bitset>
+
 #include "cpuinterface.h"
 
 CPUInterface::CPUInterface(SystemState *state_, QObject *parent) :
@@ -120,6 +123,30 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
     float high2ndToLast[4];
     float highLast[4];
 
+    //--- Find stimulation to blank the signal
+    bool stimSample[FramesPerBlock];
+    for (int frame = 0; frame < FramesPerBlock; ++frame) {
+        if (blankSample > 0) {
+            stimSample[frame] = true;
+            blankSample -= 1;
+        } else {
+            // rawBlock contains the raw data transferred from the FPGA as described in Intan_RHS2000_USB_FPGA_interface pag.7
+            bool isStimSample = false;
+            for (int s = 0; s < numStreams; ++s) {
+                isStimSample |= rawBlock[wordsPerFrame * frame + 6 + (numStreams * 20 * 2) + s] != 0;
+            }
+            if (isStimSample) {
+                blankSample = blankingWindow;
+                stimSample[frame] = true;
+                //std::bitset<16> s0(rawBlock[wordsPerFrame * frame + 6 + (numStreams * 20 * 2) + 0]);
+                //std::bitset<16> s1(rawBlock[wordsPerFrame * frame + 6 + (numStreams * 20 * 2) + 1]);
+                //std::cout << rawBlock[wordsPerFrame * frame + 5] << ": " << s0 << " " << s1 << endl;
+            } else {
+                stimSample[frame] = false;
+            }
+        }
+    }
+
     for (int channelIndex = 0; channelIndex < channels; channelIndex++) {
         uint32_t lastDataStart = channelIndex * 20;
 
@@ -159,26 +186,25 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
             prevHighFloat[s] = (float) (0.195f * (((double)parsedPrevHigh[s * channels + channelIndex]) - 32768));
         }
 
+        // (0) Index this channel's input data from the rawBlock and convert it to float.
         int32_t inIndexStream, inIndexChannel;
+        uint16_t acSample;
         if (type == ControllerRecordUSB2 || type == ControllerRecordUSB3) {
             inIndexStream = channelIndex / 32;
             inIndexChannel = channelIndex % 32;
+            for (int frame = 0; frame < FramesPerBlock; ++frame) {
+                acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3) +
+                        inIndexChannel * numStreams + inIndexStream];
+                inFloat[frame] = (float)(0.195f * (((double)acSample) - 32768));
+            }
         } else {
             inIndexStream = channelIndex / 16;
             inIndexChannel = channelIndex % 16;
-        }
-
-        // (0) Index this channel's input data from the rawBlock and convert it to float.
-        for (int frame = 0; frame < FramesPerBlock; ++frame) {
-            uint16_t acSample;
-            if (type == ControllerStimRecordUSB2) {
-                acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3 * 2) +
+            for (int frame = 0; frame < FramesPerBlock; ++frame) {
+                uint16_t acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3 * 2) +
                         (inIndexChannel * numStreams * 2) + (2 * inIndexStream + 1)];
-            } else {
-                acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3) +
-                        inIndexChannel * numStreams + inIndexStream];
+                inFloat[frame] = (float)(0.195f * (((double)acSample) - 32768));
             }
-            inFloat[frame] = (float)(0.195f * (((double)acSample) - 32768));
         }
 
         int numLowFilterIterations = floor((float)(filterParameters.lowOrder - 1) / 2.0f) + 1;
@@ -291,7 +317,11 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
         float filteredLow[FramesPerBlock];
 
         for (int s = 0; s < FramesPerBlock; ++s) {
-            filteredHigh[s] = highFloat[numHighFilterIterations - 1][s];
+            if (stimSample[s]) {
+                filteredHigh[s] = 0;
+            } else {
+                filteredHigh[s] = highFloat[numHighFilterIterations - 1][s];
+            }
             filteredLow[s] = lowFloat[numLowFilterIterations - 1][s];
         }
 
@@ -626,6 +656,8 @@ void CPUInterface::initializeMemory()
     inputIndex = 0;
     outputIndex = 0;
     spikeIndex = 0;
+
+    blankSample = 0; //---
 
     allocated = true;
 }
