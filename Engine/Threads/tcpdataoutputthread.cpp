@@ -328,7 +328,7 @@ void TCPDataOutputThread::run()
 
 void TCPDataOutputThread::updateEnabledChannels()
 {
-    // Always start with a clean slate
+    // Always start with a clean state
     channelNames = signalSources->completeChannelsNameList();
 
     enabledChannelNames.clear();

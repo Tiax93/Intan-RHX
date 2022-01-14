@@ -146,7 +146,7 @@ QStringList Channel::getTcpBandNames() const
         if (getSignalType() == AmplifierSignal) {
             if (outputToTcpLow->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|LOW");
             if (outputToTcpHigh->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|HIGH");
-            // We're treating spike differently through tcp, so don't append the SPK name here
+            if (outputToTcpSpike->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|SPK"); // We're treating spike differently through tcp, so don't append the SPK name here <- NOT TRUE
             if (state->getControllerTypeEnum() == ControllerStimRecordUSB2) {
                 if (outputToTcpDc->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|DC");
                 if (outputToTcpStim->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|STIM");
