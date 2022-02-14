@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.0.4
+//  Version 3.0.5
 //
-//  Copyright (c) 2020-2021 Intan Technologies
+//  Copyright (c) 2020-2022 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -146,7 +146,8 @@ QStringList Channel::getTcpBandNames() const
         if (getSignalType() == AmplifierSignal) {
             if (outputToTcpLow->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|LOW");
             if (outputToTcpHigh->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|HIGH");
-            if (outputToTcpSpike->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|SPK"); // We're treating spike differently through tcp, so don't append the SPK name here <- NOT TRUE
+            if (outputToTcpSpike->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|SPK");
+            // We're treating spike differently through tcp, so don't append the SPK name here
             if (state->getControllerTypeEnum() == ControllerStimRecordUSB2) {
                 if (outputToTcpDc->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|DC");
                 if (outputToTcpStim->getValue()) tcpBandNames.append(nativeChannelName->getValue() + "|STIM");
