@@ -1,19 +1,14 @@
+This is a fork of the [Intan RHX software](https://github.com/Intan-Technologies/Intan-RHX), up-to-date with the version 3.0.5 of the main branch.
+
+This is an unofficial fork with some additions compared to the official software:
+- the introduction of a post-microstimulation blanking windows where the highpass filtered traces are forced to 0 to prevent large artifact-induced signal and false detection of spikes
+- the spike detection threshold based on the RMS of the channels has been replaced by a median-based threshold as [proposed by Quian Quiroga et Al. (2004)](http://www.scholarpedia.org/article/Spike_sorting#Step_ii.29_Spike_Detection)
+
 # Intan-RHX
+
 Intan RHX is free, powerful data acquisition software that displays and records electrophysiological signals from any Intan RHD or RHS system using an RHD USB interface board, RHD recording controller, or RHS stim/recording controller.
 
-The most recent binaries are available from the Intan website: https://intantech.com or here on GitHub under Releases:
-
-* IntanRHXInstaller.exe -> Windows 64-bit installer (Wix Burn bootstrapper application that guides the user through installation)
-
-* IntanRHX.dmg -> MacOS 64-bit disk image
-
-* IntanRHX.tar.gz -> Linux 64-bit archive file
-
-These binaries were built with Qt 5.12.8.
-
-While developers are free to download the source code or fork their own repositories if they wish to make changes to their own versions, we will generally not integrate any of these changes to a public release. If there are features you'd like to see in an official Intan release or you find a bug, please send us feedback!  Thank  you!
-
-# Steps To Run Software
+# Original instruction on how to run the software
 
 ## All Platforms:
 
