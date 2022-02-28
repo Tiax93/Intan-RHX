@@ -266,6 +266,7 @@ public:
     DiscreteItemList *highType;
     DoubleRangeItem *highSWCutoffFreq;
     IntRangeItem *blankingWindow; //---
+    BooleanItem *highMeanRemoval;
 
     // Display options
     DiscreteItemList* filterDisplay1;

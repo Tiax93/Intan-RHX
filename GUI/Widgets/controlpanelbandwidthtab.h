@@ -57,6 +57,7 @@ private slots:
     void changeLowCutoff() { state->lowSWCutoffFreq->setValueWithLimits(lpCutoffLineEdit->text().toDouble()); }
     void changeHighCutoff() { state->highSWCutoffFreq->setValueWithLimits(hpCutoffLineEdit->text().toDouble()); }
     void changeBlankingWindow(int blankingWindow) { state->blankingWindow->setValueWithLimits(blankingWindow); } //---
+    void enableMeanRemoval(bool removeHighPassMean) { state->highMeanRemoval->setValue(removeHighPassMean); }
 
 private:
     SystemState* state;
@@ -83,6 +84,7 @@ private:
     QPushButton *viewFiltersButton;
     //---
     QSpinBox *blankingWindowSpinBox;
+    QCheckBox *meanRemovalCheckBox;
 
     static double lower3dBPoint(double hpf1Cutoff, double hpf2Cutoff, bool hpf2Enabled);
     static double secondPoleLocation(double target3dBPoint, double hpf1Cutoff);

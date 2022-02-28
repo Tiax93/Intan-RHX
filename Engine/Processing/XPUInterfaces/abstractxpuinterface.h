@@ -146,6 +146,7 @@ protected:
     //---
     int blankingWindow;
     int blankSample;
+    bool highMeanRemoval;
 
 private:
     void calculateNotchConstants();

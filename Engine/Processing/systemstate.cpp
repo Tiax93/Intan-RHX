@@ -359,9 +359,12 @@ SystemState::SystemState(const AbstractRHXController* controller_, StimStepSize 
     highType->setRestricted(RestrictIfRecording, RecordingErrorMessage);
     highSWCutoffFreq = new DoubleRangeItem("HighpassFilterCutoffFreqHertz", globalItems, this, 1.0, 5000.0, 250.0);
     highSWCutoffFreq->setRestricted(RestrictIfRecording, RecordingErrorMessage);
+
     //---
     blankingWindow = new IntRangeItem("blankingWindowDuration", globalItems, this, 0, 1000, 20);
     blankingWindow->setRestricted(RestrictIfRecording, RecordingErrorMessage);
+    highMeanRemoval = new BooleanItem("RemoveAverageHighpass", globalItems, this, false);
+    highMeanRemoval->setRestricted(RestrictIfRecording, RecordingErrorMessage);
 
     writeToLog("Created filtering variables");
 

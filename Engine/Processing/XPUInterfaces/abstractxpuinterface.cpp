@@ -253,6 +253,7 @@ void AbstractXPUInterface::updateFromState()
     // If any filter params have changed, recalculate them for notch, low, and high.
     updateFilters();
     blankingWindow = state->blankingWindow->getValue() * (sampleRate/1000); //---
+    highMeanRemoval = state->highMeanRemoval->getValue();
 
     // If any AmplifierSignal spikeThresholds have changed, update value in 'hoops' to inform XPU
     vector<string> ampChannelNames = state->signalSources->amplifierChannelsNameList();

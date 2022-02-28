@@ -55,7 +55,8 @@ ControlPanelBandwidthTab::ControlPanelBandwidthTab(ControllerInterface* controll
     hpOrderSpinBox(nullptr),
     hpCutoffLineEdit(nullptr),
     viewFiltersButton(nullptr),
-    blankingWindowSpinBox(nullptr) //---
+    blankingWindowSpinBox(nullptr),
+    meanRemovalCheckBox(nullptr) //---
 {
     changeBandwidthButton = new QPushButton(tr("Change Bandwidth"), this);
     advancedBandwidthButton = new QPushButton(tr("Advanced"), this);
@@ -154,9 +155,13 @@ ControlPanelBandwidthTab::ControlPanelBandwidthTab(ControllerInterface* controll
     blankingWindowLayout->addWidget(blankingWindowSpinBox);
     blankingWindowLayout->addWidget(new QLabel(tr("ms")));
 
+    meanRemovalCheckBox = new QCheckBox(tr("Remove signal mean"), this);
+    connect(meanRemovalCheckBox, SIGNAL(clicked(bool)), this, SLOT(enableMeanRemoval(bool)));
+
     QVBoxLayout *hpbwGroupBox = new QVBoxLayout;
     hpbwGroupBox->addLayout(highPassLayout);
     hpbwGroupBox->addLayout(blankingWindowLayout);
+    hpbwGroupBox->addWidget(meanRemovalCheckBox);
 
     QGroupBox *highPassGroupBox = new QGroupBox(tr("High Pass Filter (Spike Band)"), this);
     highPassGroupBox->setLayout(hpbwGroupBox);
