@@ -1,9 +1,9 @@
 This is a fork of the [Intan RHX software](https://github.com/Intan-Technologies/Intan-RHX), up-to-date with the version 3.0.5 of the main branch.
 
-This is an unofficial fork with the folowing additions to the official software:
-- the ability to set a post-microstimulation blanking windows where the highpass filtered traces are forced to 0 to prevent large artifact-induced signal and false detection of spikes
-- the spike detection threshold estiomation based on the RMS of the channels has been replaced with a median-based threshold as [proposed by Quian Quiroga et Al. (2004)](http://www.scholarpedia.org/article/Spike_sorting#Step_ii.29_Spike_Detection)
-- the ability to subtract the average of all the highpass filtered traces from eveery channel, to reduce artifacts and increase the overall SNR.
+This is an unofficial fork with the following additions to the official software:
+- the possibility to set a post-microstimulation blanking windows where the highpass filtered traces are forced to 0 to prevent large artifact-induced signal and false detection of spikes
+- the spike detection threshold estimation based on the RMS of the channels has been replaced with a median-based threshold as [proposed by Quian Quiroga et Al. (2004)](http://www.scholarpedia.org/article/Spike_sorting#Step_ii.29_Spike_Detection)
+- the possibility to subtract the average of all the highpass filtered traces from every channel, to reduce artifacts and increase the overall SNR.
 
 # Intan-RHX
 
