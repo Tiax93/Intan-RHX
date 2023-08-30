@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -56,6 +56,7 @@ class Channel;
 class BooleanItem;
 class XMLInterface;
 class ControllerInterface;
+class DataFileReader;
 
 struct CPUInfo {
     cl_platform_id platformId;
@@ -89,7 +90,7 @@ class SystemState : public QObject
 {
     Q_OBJECT
 public:
-    SystemState(const AbstractRHXController* controller_, StimStepSize stimStepSize_, int numSPIPorts_, bool expanderConnected_);
+    SystemState(const AbstractRHXController* controller_, StimStepSize stimStepSize_, int numSPIPorts_, bool expanderConnected_, bool testMode_=false, DataFileReader* dataFileReader_=nullptr);
     ~SystemState();
 
     AmplifierSampleRate getSampleRateEnum() const;
@@ -144,6 +145,7 @@ public:
     DiscreteItemList* stimStepSize;
     int numSPIPorts;  // no direct relation to commands - should leave as is
     BooleanItem* expanderConnected;
+    BooleanItem *testMode;
     int highDPIScaleFactor;  // scale factor for high-DPI monitors (e.g., Retina displays)
     QRect availableScreenResolution;
 
@@ -245,6 +247,9 @@ public:
     DoubleRangeItem *desiredImpedanceFreq;
     DoubleRangeItem *actualImpedanceFreq;
     StateFilenameItem *impedanceFilename;
+
+    // Referencing
+    BooleanItem *useMedianReference;
 
     // Filtering
     BooleanItem *dspEnabled;
@@ -374,6 +379,10 @@ public:
     SingleItemList globalItems;
     FilenameItemList stateFilenameItems;
 
+    int64_t getPlaybackBlocks();
+    void setLastTimestamp(int timestamp) { lastTimestamp = timestamp; }
+    int getLastTimestamp() const { return lastTimestamp; }
+
 signals:
     void stateChanged();
     void headstagesChanged();
@@ -395,11 +404,15 @@ private:
 
     int timerId;
 
+    int lastTimestamp;
+
     XMLInterface* globalSettingsInterface;
 
     void queueStateChangedSignal();
 
     QElapsedTimer logTimer;
+
+    DataFileReader* dataFileReader;
 };
 
 #endif // SYSTEMSTATE_H

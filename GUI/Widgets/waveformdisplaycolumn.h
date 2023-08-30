@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -65,6 +65,8 @@ public:
     inline void loadWaveformData(WaveformFifo* waveformFifo) { waveformPlot->loadWaveformData(waveformFifo); }
     inline void loadWaveformDataFromMemory(WaveformFifo* waveformFifo, int startTime, bool loadAll = false)
         { waveformPlot->loadWaveformDataFromMemory(waveformFifo, startTime, loadAll); }
+    inline void loadWaveformDataDirect(QVector<QVector<QVector<double>>> &ampData, QVector<QVector<QString>> &ampChannelNames)
+        { waveformPlot->loadWaveformDataDirect(ampData, ampChannelNames); }
 
     QString getSelectedPort() const { return portComboBox->currentText().section(" (", 0, 0); }
     void setSelectedPort(const QString& portName);

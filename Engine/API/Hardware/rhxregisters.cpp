@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -72,7 +72,7 @@ RHXRegisters::RHXRegisters(ControllerType type_, double sampleRate_, StimStepSiz
 // Size of on-FPGA auxiliary command RAM banks
 int RHXRegisters::maxCommandLength(ControllerType type)
 {
-    if (type == ControllerStimRecordUSB2) return 8192;
+    if (type == ControllerStimRecord) return 8192;
     else return 1024;
 }
 
@@ -84,7 +84,7 @@ int RHXRegisters::maxCommandLength() const
 // Maximum number of amplifier channels per chip
 int RHXRegisters::maxNumChannelsPerChip(ControllerType type)
 {
-    if (type == ControllerStimRecordUSB2) return 16;
+    if (type == ControllerStimRecord) return 16;
     else return 64;
 }
 
@@ -96,7 +96,7 @@ int RHXRegisters::maxNumChannelsPerChip() const
 // Set sampling-rate-dependent registers correctly.
 void RHXRegisters::setSamplingParameters()
 {
-    if (type == ControllerStimRecordUSB2) {
+    if (type == ControllerStimRecord) {
         if (sampleRate < 6001.0) {
             muxBias = 40;
             adcBufferBias = 32;
@@ -512,7 +512,7 @@ void RHXRegisters::setStimEnable(bool enable)
 
 int RHXRegisters::getRegisterValue(int reg) const
 {
-    if (type == ControllerStimRecordUSB2) return getRHSRegisterValue(reg);
+    if (type == ControllerStimRecord) return getRHSRegisterValue(reg);
     else return getRHDRegisterValue(reg);
 }
 
@@ -1059,7 +1059,7 @@ double RHXRegisters::setLowerBandwidth(double lowerBandwidth, int select)
 // Return a MOSI command (CALIBRATE or CLEAR or COMPLIANCE MONITOR RESET).
 unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType)
 {
-    if (type == ControllerStimRecordUSB2) {
+    if (type == ControllerStimRecord) {
         switch (commandType) {
         case RHXCommandCalibrate:
             return 0x55000000;   // 01010101 00000000 00000000 00000000
@@ -1094,7 +1094,7 @@ unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType)
 // Return a MOSI command (CONVERT or READ).
 unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType, unsigned int arg1)
 {
-    if (type == ControllerStimRecordUSB2) {
+    if (type == ControllerStimRecord) {
         switch (commandType) {
         case RHXCommandConvert:
             if (arg1 > 15) {
@@ -1149,7 +1149,7 @@ unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType, unsigned
 // Return a MOSI command (WRITE).
 unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType, unsigned int arg1, unsigned int arg2)
 {
-    if (type == ControllerStimRecordUSB2) {
+    if (type == ControllerStimRecord) {
         switch (commandType) {
         case RHXCommandRegWrite:
             if (arg1 > 255) {
@@ -1207,7 +1207,7 @@ unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType, unsigned
 unsigned int RHXRegisters::createRHXCommand(RHXCommandType commandType, unsigned int arg1, unsigned int arg2,
                                             unsigned int uFlag, unsigned int mFlag)
 {
-    if (type == ControllerStimRecordUSB2) {
+    if (type == ControllerStimRecord) {
         switch (commandType) {
         case RHXCommandRegWrite:
             if (arg1 > 255) {
@@ -1606,7 +1606,7 @@ int RHXRegisters::createCommandListRHDRegisterConfig(vector<unsigned int> &comma
 // Return the length of the command list.
 int RHXRegisters::createCommandListRHSRegisterConfig(vector<unsigned int> &commandList, bool updateStimParams)
 {
-    if (type != ControllerStimRecordUSB2) return -1;
+    if (type != ControllerStimRecord) return -1;
 
     commandList.clear();    // If command list already exists, erase it and start a new one.
 
@@ -1716,7 +1716,7 @@ int RHXRegisters::createCommandListRHSRegisterConfig(vector<unsigned int> &comma
 // Read all registers from chip without changing any values.
 int RHXRegisters::createCommandListRHSRegisterRead(vector<unsigned int> &commandList)
 {
-    if (type != ControllerStimRecordUSB2) return -1;
+    if (type != ControllerStimRecord) return -1;
 
     commandList.clear();    // If command list already exists, erase it and start a new one.
 
@@ -1793,7 +1793,7 @@ int RHXRegisters::createCommandListDummy(vector <unsigned int> &commandList, int
 int RHXRegisters::createCommandListSetStimMagnitudes(vector<unsigned int> &commandList, int channel,
                                                          int posMag, int posTrim, int negMag, int negTrim)
 {
-    if (type != ControllerStimRecordUSB2) return -1;
+    if (type != ControllerStimRecord) return -1;
 
     commandList.clear();    // If command list already exists, erase it and start a new one.
 
@@ -1816,12 +1816,37 @@ int RHXRegisters::createCommandListSetStimMagnitudes(vector<unsigned int> &comma
     return (int)commandList.size();
 }
 
+int RHXRegisters::createCommandListSetStimMagnitudesAllChannels(vector<unsigned int> &commandList, int posMag, int posTrim, int negMag, int negTrim)
+{
+    if (type != ControllerStimRecord) return -1;
+
+    commandList.clear(); // If command list already exists, erase it and start a new one.
+
+    // Start with two dummy commands.
+    commandList.push_back(createRHXCommand(RHXCommandRegRead, 255));
+    commandList.push_back(createRHXCommand(RHXCommandRegRead, 255));
+
+    for (int channel = 0; channel < 16; channel++) {
+        setPosStimMagnitude(channel, posMag, posTrim);
+        setNegStimMagnitude(channel, negMag, negTrim);
+        commandList.push_back(createRHXCommand(RHXCommandRegWrite, 96 + channel, getRegisterValue(96 + channel), 1, 0)); // positive register; update
+        commandList.push_back(createRHXCommand(RHXCommandRegWrite, 64 + channel, getRegisterValue(64 + channel), 1, 0)); // negative register; update
+    }
+
+    // More dummy commands to make 128 total commands
+    while (commandList.size() < 128) {
+        commandList.push_back(createRHXCommand(RHXCommandRegRead, 255));
+    }
+
+    return (int)commandList.size();
+}
+
 // Set charge recovery current limit and target voltage (Registers 36 and 37).
 // Return the length of the command list (which should be 128).
 int RHXRegisters::createCommandListConfigChargeRecovery(vector<unsigned int> &commandList,
                                                             ChargeRecoveryCurrentLimit currentLimit, double targetVoltage)
 {
-    if (type != ControllerStimRecordUSB2) return -1;
+    if (type != ControllerStimRecord) return -1;
 
     commandList.clear();    // If command list already exists, erase it and start a new one.
 
@@ -1865,7 +1890,7 @@ int RHXRegisters::createCommandListZcheckDac(vector<unsigned int> &commandList, 
         return -1;
     }
 
-    unsigned int dacRegister = (type == ControllerStimRecordUSB2) ? 3 : 6;
+    unsigned int dacRegister = (type == ControllerStimRecord) ? 3 : 6;
     if (frequency == 0.0) {
         for (int i = 0; i < maxCommandLength(); ++i) {
             commandList.push_back(createRHXCommand(RHXCommandRegWrite, dacRegister, 128));

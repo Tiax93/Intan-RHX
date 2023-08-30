@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -87,6 +87,13 @@ QString BoardIdentifier::getBoardTypeString(BoardMode mode, int numSpiPorts)
         return UnknownUSB2String;
     case UnknownUSB3Device:
         return UnknownUSB3String;
+    case RHSController_7310:
+        return RHS128ch_7310String;
+    case RHDController_7310:
+        if (numSpiPorts == 4) return RHD512ch_7310String;
+        else return RHD1024ch_7310String;
+    case UnknownUSB3_7310Device:
+        return UnknownUSB3String;
     default:
         return UnknownString;
     }
@@ -97,11 +104,11 @@ QIcon BoardIdentifier::getIcon(const QString& boardType, QStyle *style, int size
 {
     if (boardType == RHDBoardString)
         return QIcon(":/images/usb_interface_board.png");
-    else if (boardType == RHS128chString)
+    else if (boardType == RHS128chString || boardType == RHS128ch_7310String)
         return QIcon(":/images/stim_controller_board.png");
-    else if (boardType == RHD512chString)
+    else if (boardType == RHD512chString || boardType == RHD512ch_7310String)
         return QIcon(":/images/rhd512_controller_board.png");
-    else if (boardType == RHD1024chString)
+    else if (boardType == RHD1024chString || boardType == RHD1024ch_7310String)
         return QIcon(":/images/rhd1024_controller_board.png");
     else if (boardType == CLAMP2chString)
         return QIcon(":/images/clamp2_controller_board.png");
@@ -143,7 +150,17 @@ void BoardIdentifier::identifyController(ControllerInfo *controller, int index)
     controller->serialNumber = dev->GetDeviceListSerial(index).c_str();
 
     // Populate usbVersion field.
-    controller->usbVersion = (opalKellyModelName(dev->GetDeviceListModel(index)) == "XEM6010LX45") ? USB2 : USB3;
+    QString modelName = opalKellyModelName(dev->GetDeviceListModel(index));
+    if (modelName == "XEM6010LX45") {
+        controller->usbVersion = USB2;
+    } else if (modelName == "XEM6310LX45") {
+        controller->usbVersion = USB3;
+    } else if (modelName == "XEM7310A75") {
+        controller->usbVersion = USB3_7310;
+    } else {
+        controller->usbVersion = USB3_7310;
+        qDebug() << "Opal Kelly model name not recognized, assuming XEM7310";
+    }
 
     // Upload bitfile to determine boardMode, expConnected, and numSPIPorts.
     // Initialize expConnected, numSPIPorts, and boardMode to correspond to an unsuccessful mat.
@@ -161,7 +178,16 @@ void BoardIdentifier::identifyController(ControllerInfo *controller, int index)
     dev->LoadDefaultPLLConfiguration();
 
     // Determine proper bitfile to load to FPGA (depending on if USB 2 or 3).
-    QString bitfilename = (controller->usbVersion == USB2) ? ConfigFileXEM6010Tester : ConfigFileRHDController;
+    //QString bitfilename = (controller->usbVersion == USB2) ? ConfigFileXEM6010Tester : ConfigFileRHDController;
+    QString bitfilename;
+    if (controller->usbVersion == USB2) {
+        bitfilename = ConfigFileXEM6010Tester;
+    } else if (controller->usbVersion == USB3) {
+        bitfilename = ConfigFileRHDController;
+    } else {
+        bitfilename = ConfigFileRHDController_7310;
+        //bitfilename = ConfigFileRHSController_7310;
+    }
 
     // Upload bit file.
     if (!uploadFpgaBitfileQMessageBox(QCoreApplication::applicationDirPath() + "/" + bitfilename)) {
@@ -193,7 +219,7 @@ void BoardIdentifier::identifyController(ControllerInfo *controller, int index)
             controller->boardMode = UnknownUSB2Device;
             return;
         }
-    } else {
+    } else if (controller->usbVersion == USB3) {
         // Populate boardMode field for USB3 boards.
         switch (boardMode) {
         case RHDControllerBoardMode:
@@ -203,14 +229,27 @@ void BoardIdentifier::identifyController(ControllerInfo *controller, int index)
             controller->boardMode = UnknownUSB3Device;
             return;
         }
+    } else {
+        // Populate boardMode field for USB3_7310 boards.
+        switch (boardMode) {
+        case RHSControllerBoardMode:
+            controller->boardMode = RHSController_7310;
+            break;
+        case RHDControllerBoardMode:
+            controller->boardMode = RHDController_7310;
+            break;
+        default:
+            controller->boardMode = UnknownUSB3_7310Device;
+            return;
+        }
     }
 
     // For all boards other than the RHD USB Interface Board, determine the number of SPI ports and whether an expander board
     // is connected.
     if (controller->boardMode != RHDUSBInterfaceBoard) {
         dev->UpdateWireOuts();
-        controller->numSPIPorts = RHXController::getNumSPIPorts(dev, (controller->usbVersion == USB3),
-                                                                controller->expConnected);
+        controller->numSPIPorts = RHXController::getNumSPIPorts(dev, (controller->usbVersion == USB3 || controller->usbVersion == USB3_7310),
+                                                                controller->expConnected, controller->boardMode == RHSController_7310);
     }
 }
 
@@ -272,6 +311,8 @@ QString BoardIdentifier::opalKellyModelName(int model) const
         return "XEM6310MTLX45T";
     case OK_PRODUCT_XEM6320LX130T:
         return "XEM6320LX130T";
+    case OK_PRODUCT_XEM7310A75:
+        return "XEM7310A75";
     default:
         return "UNKNOWN";
     }
@@ -329,6 +370,7 @@ BoardSelectDialog::BoardSelectDialog(QWidget *parent) :
     playbackButton(nullptr),
     advancedButton(nullptr),
     useOpenCL(true),
+    playbackPorts(255),
     defaultSampleRateCheckBox(nullptr),
     defaultSettingsFileCheckBox(nullptr),
     splash(nullptr),
@@ -417,7 +459,9 @@ BoardSelectDialog::BoardSelectDialog(QWidget *parent) :
         QString thisText = boardTable->itemAt(row, 0)->text();
         // If this type of board is recognized and enabled, give it focus. Otherwise, move to the next row.
         if (thisText == RHDBoardString || thisText == RHS128chString ||
-                thisText == RHD512chString || thisText == RHD1024chString) {
+                thisText == RHD512chString || thisText == RHD1024chString ||
+                thisText == RHS128ch_7310String || thisText == RHD512ch_7310String ||
+                thisText == RHD1024ch_7310String) {
             boardTable->setRangeSelected(QTableWidgetSelectionRange(row, 0, row, 2), true);
             boardTable->setFocus();
             break;
@@ -441,7 +485,8 @@ bool BoardSelectDialog::validControllersPresent(QVector<ControllerInfo*> cInfo)
 {
     for (int i = 0; i < cInfo.size(); i++) {
         if (cInfo[i]->boardMode == RHDUSBInterfaceBoard || cInfo[i]->boardMode == RHDController ||
-                cInfo[i]->boardMode == RHSController)
+                cInfo[i]->boardMode == RHSController || cInfo[i]->boardMode == RHSController_7310 ||
+                cInfo[i]->boardMode == RHDController_7310)
             return true;
     }
     return false;
@@ -454,7 +499,7 @@ void BoardSelectDialog::showDemoMessageBox()
     bool rememberSettings = false;
 
     DemoSelections demoSelection;
-    DemoDialog demoDialog(&demoSelection, useOpenCL, this);
+    DemoDialog demoDialog(&demoSelection, useOpenCL, playbackPorts, this);
     demoDialog.exec();
 
     if (demoSelection == DemoPlayback) {
@@ -466,17 +511,17 @@ void BoardSelectDialog::showDemoMessageBox()
         } else if (demoSelection == DemoRecordingController) {
             controllerType = ControllerRecordUSB3;
         } else {
-            controllerType = ControllerStimRecordUSB2;
+            controllerType = ControllerStimRecord;
         }
 
-        StartupDialog startupDialog(controllerType, &sampleRate, &stimStepSize, &rememberSettings, false, this);
+        StartupDialog startupDialog(controllerType, &sampleRate, &stimStepSize, &rememberSettings, false, false, this);
         startupDialog.exec();
 
         splash->show();
         splash->showMessage(splashMessage, splashMessageAlign, splashMessageColor);
 
-        startSoftware(controllerType, sampleRate, stimStepSize, controllerType == ControllerRecordUSB3 ? 8 : 4, true, "N/A",
-                      SyntheticMode);
+        startSoftware(controllerType, sampleRate, stimStepSize, (controllerType == ControllerRecordUSB3) ? 8 : 4, true, "N/A",
+                      SyntheticMode, false);
 
         splash->finish(controlWindow);
         this->accept();
@@ -529,7 +574,9 @@ void BoardSelectDialog::populateTable()
 
         // If the type of board is unrecognized, disable the row (greyed-out and unclickable).
         if (!(boardType == RHDBoardString || boardType == RHS128chString ||
-              boardType == RHD512chString || boardType == RHD1024chString)) {
+              boardType == RHD512chString || boardType == RHD1024chString ||
+              boardType == RHS128ch_7310String || boardType == RHD512ch_7310String ||
+              boardType == RHD1024ch_7310String)) {
             intanBoardType->setFlags(Qt::NoItemFlags);
             ioExpanderStatus->setFlags(Qt::NoItemFlags);
             serialNumber->setFlags(Qt::NoItemFlags);
@@ -574,10 +621,10 @@ QSize BoardSelectDialog::calculateTableSize()
 }
 
 void BoardSelectDialog::startSoftware(ControllerType controllerType, AmplifierSampleRate sampleRate, StimStepSize stimStepSize,
-                                      int numSPIPorts, bool expanderConnected, const QString& boardSerialNumber, AcquisitionMode mode)
+                                      int numSPIPorts, bool expanderConnected, const QString& boardSerialNumber, AcquisitionMode mode, bool is7310, DataFileReader* dataFileReader)
 {
     if (mode == LiveMode) {
-        rhxController = new RHXController(controllerType, sampleRate);
+        rhxController = new RHXController(controllerType, sampleRate, is7310);
     } else if (mode == SyntheticMode) {
         rhxController = new SyntheticRHXController(controllerType, sampleRate);
     } else if (mode == PlaybackMode) {
@@ -586,13 +633,16 @@ void BoardSelectDialog::startSoftware(ControllerType controllerType, AmplifierSa
         return;
     }
 
-    state = new SystemState(rhxController, stimStepSize, numSPIPorts, expanderConnected);
+    QSettings settings;
+    bool testMode = settings.value("testMode", false).toBool() && mode == LiveMode;
+
+    state = new SystemState(rhxController, stimStepSize, numSPIPorts, expanderConnected, testMode, dataFileReader);
     state->highDPIScaleFactor = this->devicePixelRatio();  // Use this to adjust graphics for high-DPI monitors.
     state->availableScreenResolution = QGuiApplication::primaryScreen()->geometry();
-    controllerInterface = new ControllerInterface(state, rhxController, boardSerialNumber, useOpenCL, dataFileReader, this);
+    controllerInterface = new ControllerInterface(state, rhxController, boardSerialNumber, useOpenCL, dataFileReader, this, is7310);
     state->setupGlobalSettingsLoadSave(controllerInterface);
     parser = new CommandParser(state, controllerInterface, this);
-    controlWindow = new ControlWindow(state, parser, controllerInterface);
+    controlWindow = new ControlWindow(state, parser, controllerInterface, rhxController);
 
     connect(controlWindow, SIGNAL(sendExecuteCommand(QString)), parser, SLOT(executeCommandSlot(QString)));
     connect(controlWindow, SIGNAL(sendExecuteCommandWithParameter(QString,QString)), parser, SLOT(executeCommandWithParameterSlot(QString, QString)));
@@ -610,6 +660,8 @@ void BoardSelectDialog::startSoftware(ControllerType controllerType, AmplifierSa
 
     if (dataFileReader) {
         connect(controlWindow, SIGNAL(setDataFileReaderSpeed(double)), dataFileReader, SLOT(setPlaybackSpeed(double)));
+        connect(controlWindow, SIGNAL(setDataFileReaderLive(bool)), dataFileReader, SLOT(setLive(bool)));
+        connect(controlWindow, SIGNAL(jumpToEnd()), dataFileReader, SLOT(jumpToEnd()));
         connect(controlWindow, SIGNAL(jumpToStart()), dataFileReader, SLOT(jumpToStart()));
         connect(controlWindow, SIGNAL(jumpToPosition(QString)), dataFileReader, SLOT(jumpToPosition(QString)));
         connect(controlWindow, SIGNAL(jumpRelative(double)), dataFileReader, SLOT(jumpRelative(double)));
@@ -633,7 +685,6 @@ void BoardSelectDialog::startSoftware(ControllerType controllerType, AmplifierSa
 
     controlWindow->show();
 
-    QSettings settings;
     settings.beginGroup(ControllerTypeSettingsGroup[(int)state->getControllerTypeEnum()]);
     if (defaultSettingsFileCheckBox->isChecked()) {
         settings.setValue("loadDefaultSettingsFile", true);
@@ -647,6 +698,10 @@ void BoardSelectDialog::startSoftware(ControllerType controllerType, AmplifierSa
         settings.setValue("loadDefaultSettingsFile", false);
     }
     settings.endGroup();
+
+    if (state->testMode->getValue()) {
+        state->plottingMode->setValue("Original");
+    }
 }
 
 // Trigger the currently selected board's software.
@@ -663,7 +718,7 @@ void BoardSelectDialog::newRowSelected(int row)
 
     ControllerType controllerType = ControllerRecordUSB3;
     if (boardTable->item(row, 0)->text() == RHDBoardString) controllerType = ControllerRecordUSB2;
-    if (boardTable->item(row, 0)->text() == RHS128chString) controllerType = ControllerStimRecordUSB2;
+    if (boardTable->item(row, 0)->text() == RHS128chString || boardTable->item(row, 0)->text() == RHS128ch_7310String) controllerType = ControllerStimRecord;
 
     QSettings settings;
     settings.beginGroup(ControllerTypeSettingsGroup[(int)controllerType]);
@@ -675,7 +730,7 @@ void BoardSelectDialog::newRowSelected(int row)
         defaultSampleRateCheckBox->setVisible(true);
         int defaultSampleRateIndex = settings.value("defaultSampleRate", 14).toInt();
         int defaultStimStepSizeIndex = settings.value("defaultStimStepSize", 6).toInt();
-        if (controllerType == ControllerStimRecordUSB2) {
+        if (controllerType == ControllerStimRecord) {
             defaultSampleRateCheckBox->setText(tr("Start software with ") + SampleRateString[defaultSampleRateIndex] +
                                                tr(" sample rate and ") +
                                                StimStepSizeString[defaultStimStepSizeIndex]);
@@ -714,15 +769,16 @@ void BoardSelectDialog::startBoard(int row)
 
     ControllerType controllerType = ControllerRecordUSB3;
     if (boardTable->item(row, 0)->text() == RHDBoardString) controllerType = ControllerRecordUSB2;
-    if (boardTable->item(row, 0)->text() == RHS128chString) controllerType = ControllerStimRecordUSB2;
+    if (boardTable->item(row, 0)->text() == RHS128chString || boardTable->item(row, 0)->text() == RHS128ch_7310String) controllerType = ControllerStimRecord;
 
     QSettings settings;
+    bool testMode = settings.value("testMode", false).toBool();
     settings.beginGroup(ControllerTypeSettingsGroup[(int)controllerType]);
     if (defaultSampleRateCheckBox->isChecked()) {
         sampleRate = (AmplifierSampleRate) settings.value("defaultSampleRate", 14).toInt();
         stimStepSize = (StimStepSize) settings.value("defaultStimStepSize", 6).toInt();
     } else {
-        StartupDialog *startupDialog = new StartupDialog(controllerType, &sampleRate, &stimStepSize, &rememberSettings, true, this);
+        StartupDialog *startupDialog = new StartupDialog(controllerType, &sampleRate, &stimStepSize, &rememberSettings, true, testMode, this);
         startupDialog->exec();
 
         if (rememberSettings) {
@@ -739,7 +795,7 @@ void BoardSelectDialog::startBoard(int row)
     splash->showMessage(splashMessage, splashMessageAlign, splashMessageColor);
 
     startSoftware(controllerType, sampleRate, stimStepSize, controllersInfo.at(row)->numSPIPorts,
-                  controllersInfo.at(row)->expConnected, boardTable->item(row, 2)->text(), LiveMode);
+                  controllersInfo.at(row)->expConnected, boardTable->item(row, 2)->text(), LiveMode, controllersInfo.at(row)->usbVersion == USB3_7310);
 
     splash->finish(controlWindow);
     this->accept();
@@ -759,7 +815,7 @@ void BoardSelectDialog::playbackDataFile()
 
     bool canReadFile = false;
     QString report;
-    dataFileReader = new DataFileReader(playbackFileName, canReadFile, report);
+    dataFileReader = new DataFileReader(playbackFileName, canReadFile, report, playbackPorts);
     if (!canReadFile) {
         ScrollableMessageBoxDialog msgBox(this, "Unable to Load Data File", report);
         msgBox.exec();
@@ -777,7 +833,7 @@ void BoardSelectDialog::playbackDataFile()
     splash->showMessage(splashMessage, splashMessageAlign, splashMessageColor);
 
     startSoftware(dataFileReader->controllerType(), dataFileReader->sampleRate(), dataFileReader->stimStepSize(),
-                  dataFileReader->numSPIPorts(), dataFileReader->expanderConnected(), "N/A", PlaybackMode);
+                  dataFileReader->numSPIPorts(), dataFileReader->expanderConnected(), "N/A", PlaybackMode, false, dataFileReader);
 
     splash->finish(controlWindow);
     this->accept();
@@ -785,6 +841,6 @@ void BoardSelectDialog::playbackDataFile()
 
 void BoardSelectDialog::advanced()
 {
-    AdvancedStartupDialog advancedStartupDialog(useOpenCL, this);
+    AdvancedStartupDialog advancedStartupDialog(useOpenCL, playbackPorts, false, this);
     advancedStartupDialog.exec();
 }

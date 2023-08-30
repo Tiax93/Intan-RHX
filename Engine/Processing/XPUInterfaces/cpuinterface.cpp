@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -27,9 +27,6 @@
 //  See <http://www.intantech.com> for documentation and product information.
 //
 //------------------------------------------------------------------------------
-
-#include <iostream>
-#include <bitset>
 
 #include "cpuinterface.h"
 
@@ -95,16 +92,14 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
     const unsigned int snippetsPerBlock = (int) ceil((double) ((double) FramesPerBlock / (double) SnippetSize) + 1.0);
 
     float inFloat[FramesPerBlock];
-    float prevHighFloat[FramesPerBlock][channels];
+    float prevHighFloat[FramesPerBlock];
     float lowFloat[4][FramesPerBlock];
     float wideFloat[FramesPerBlock];
     float highFloat[4][FramesPerBlock];
 
     for (int a = 0; a < FramesPerBlock; ++a) {
         inFloat[a] = 0.0f;
-        for (int c = 0; c < channels; ++c) {
-            prevHighFloat[a][c] = 0.0f;
-        }
+        prevHighFloat[a] = 0.0f;
         wideFloat[a] = 0.0f;
         for (int b = 0; b < 4; ++b) {
             lowFloat[b][a] = 0.0f;
@@ -125,32 +120,6 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
     float high2ndToLast[4];
     float highLast[4];
 
-    float filteredHigh[FramesPerBlock][channels];
-
-    //--- Find stimulation to blank the signal
-    bool stimSample[FramesPerBlock];
-    for (int frame = 0; frame < FramesPerBlock; ++frame) {
-        if (blankSample > 0) {
-            stimSample[frame] = true;
-            blankSample -= 1;
-        } else {
-            // rawBlock contains the raw data transferred from the FPGA as described in Intan_RHS2000_USB_FPGA_interface pag.7
-            bool isStimSample = false;
-            for (int s = 0; s < numStreams; ++s) {
-                isStimSample |= rawBlock[wordsPerFrame * frame + 6 + (numStreams * 20 * 2) + s] != 0;
-            }
-            if (isStimSample) {
-                blankSample = blankingWindow;
-                stimSample[frame] = true;
-                //std::bitset<16> s0(rawBlock[wordsPerFrame * frame + 6 + (numStreams * 20 * 2) + 0]);
-                //std::bitset<16> s1(rawBlock[wordsPerFrame * frame + 6 + (numStreams * 20 * 2) + 1]);
-                //std::cout << rawBlock[wordsPerFrame * frame + 5] << ": " << s0 << " " << s1 << endl;
-            } else {
-                stimSample[frame] = false;
-            }
-        }
-    }
-
     for (int channelIndex = 0; channelIndex < channels; channelIndex++) {
         uint32_t lastDataStart = channelIndex * 20;
 
@@ -165,6 +134,8 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
         uint32_t wide2ndToLastIndex = lastDataStart + 18;
         uint32_t wideLastIndex = lastDataStart + 19;
 
+        int32_t snippetIndex = 0;
+
         for (int i = 0; i < 4; ++i) {
             low2ndToLast[i] = prevLast2[low2ndToLastIndex[i]];
             lowLast[i] = prevLast2[lowLastIndex[i]];
@@ -176,6 +147,8 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
         float inLast = prevLast2[inLastIndex];
         float wide2ndToLast = prevLast2[wide2ndToLastIndex];
         float wideLast = prevLast2[wideLastIndex];
+        float threshold = hoops[channelIndex].threshold;
+        bool useHoops = (hoops[channelIndex].useHoops == 1) ? true : false;
 
         for (s = 0; s < snippetsPerBlock; ++s) {
             spikeChunk[s * channels + channelIndex] = 0;
@@ -183,28 +156,29 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
         }
 
         for (s = 0; s < SnippetSize; ++s) {
-            prevHighFloat[s][channelIndex] = (float) (0.195f * (((double)parsedPrevHigh[s * channels + channelIndex]) - 32768));
+            prevHighFloat[s] = (float) (0.195f * (((double)parsedPrevHigh[s * channels + channelIndex]) - 32768));
         }
 
-        // (0) Index this channel's input data from the rawBlock and convert it to float.
         int32_t inIndexStream, inIndexChannel;
-        uint16_t acSample;
         if (type == ControllerRecordUSB2 || type == ControllerRecordUSB3) {
             inIndexStream = channelIndex / 32;
             inIndexChannel = channelIndex % 32;
-            for (int frame = 0; frame < FramesPerBlock; ++frame) {
-                acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3) +
-                        inIndexChannel * numStreams + inIndexStream];
-                inFloat[frame] = (float)(0.195f * (((double)acSample) - 32768));
-            }
         } else {
             inIndexStream = channelIndex / 16;
             inIndexChannel = channelIndex % 16;
-            for (int frame = 0; frame < FramesPerBlock; ++frame) {
-                uint16_t acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3 * 2) +
+        }
+
+        // (0) Index this channel's input data from the rawBlock and convert it to float.
+        for (int frame = 0; frame < FramesPerBlock; ++frame) {
+            uint16_t acSample;
+            if (type == ControllerStimRecord) {
+                acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3 * 2) +
                         (inIndexChannel * numStreams * 2) + (2 * inIndexStream + 1)];
-                inFloat[frame] = (float)(0.195f * (((double)acSample) - 32768));
+            } else {
+                acSample = rawBlock[wordsPerFrame * frame + 6 + (numStreams * 3) +
+                        inIndexChannel * numStreams + inIndexStream];
             }
+            inFloat[frame] = (float)(0.195f * (((double)acSample) - 32768));
         }
 
         int numLowFilterIterations = floor((float)(filterParameters.lowOrder - 1) / 2.0f) + 1;
@@ -313,76 +287,13 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
             }
         }
 
+        float filteredHigh[FramesPerBlock];
         float filteredLow[FramesPerBlock];
 
         for (int s = 0; s < FramesPerBlock; ++s) {
-            if (stimSample[s]) {
-                filteredHigh[s][channelIndex] = 0;
-            } else {
-                filteredHigh[s][channelIndex] = highFloat[numHighFilterIterations - 1][s];
-            }
+            filteredHigh[s] = highFloat[numHighFilterIterations - 1][s];
             filteredLow[s] = lowFloat[numLowFilterIterations - 1][s];
         }
-
-        for (s = 0; s < FramesPerBlock; ++s) {
-            // Boundary check to make sure result will fit in a uint16_t.
-            if (wideFloat[s] > 6389.0f) wideFloat[s] = 6389.0f;
-            else if (wideFloat[s] < -6389.0f) wideFloat[s] = -6389.0f;
-
-            if (filteredLow[s] > 6389.0f) filteredLow[s] = 6389.0f;
-            else if (filteredLow[s] < -6389.0f) filteredLow[s] = -6389.0f;
-
-            // (4) Convert outputs to uint16_t.
-            outIndex = s * channels + channelIndex;
-
-            lowChunk[outIndex] = (uint16_t) round((filteredLow[s] / 0.195f) + 32768);
-            wideChunk[outIndex] = (uint16_t) round((wideFloat[s] / 0.195f) + 32768);
-        }
-
-        // Update 'prevLast2' array with this block's samples.
-        for (int filterIndex = 0; filterIndex < 4; ++filterIndex) {
-            prevLast2[low2ndToLastIndex[filterIndex]] = lowFloat[filterIndex][FramesPerBlock - 2];
-            prevLast2[lowLastIndex[filterIndex]] = lowFloat[filterIndex][FramesPerBlock - 1];
-            prevLast2[high2ndToLastIndex[filterIndex]] = highFloat[filterIndex][FramesPerBlock - 2];
-            prevLast2[highLastIndex[filterIndex]] = highFloat[filterIndex][FramesPerBlock - 1];
-        }
-
-        prevLast2[in2ndToLastIndex] = inFloat[FramesPerBlock - 2];
-        prevLast2[inLastIndex] = inFloat[FramesPerBlock - 1];
-        prevLast2[wide2ndToLastIndex] = wideFloat[FramesPerBlock - 2];
-        prevLast2[wideLastIndex] = wideFloat[FramesPerBlock - 1];
-    }
-
-    // remove average channels signal from all channels
-    if (highMeanRemoval) {
-        for (int s = 0; s < FramesPerBlock; ++s) {
-            float averageFilteredHigh = 0;
-            for (int channelIndex = 0; channelIndex < channels; channelIndex++) {
-                averageFilteredHigh += filteredHigh[s][channelIndex];
-            }
-            averageFilteredHigh /= channels;
-            for (int channelIndex = 0; channelIndex < channels; channelIndex++) {
-                filteredHigh[s][channelIndex] -= averageFilteredHigh;
-            }
-        }
-    }
-
-
-    for (int channelIndex = 0; channelIndex < channels; channelIndex++) {
-
-        for (s = 0; s < FramesPerBlock; ++s) {
-            // Boundary check to make sure result will fit in a uint16_t.
-            if (filteredHigh[s][channelIndex] > 6389.0f) filteredHigh[s][channelIndex] = 6389.0f;
-            else if (filteredHigh[s][channelIndex] < -6389.0f) filteredHigh[s][channelIndex] = -6389.0f;
-
-            // (4) Convert outputs to uint16_t.
-            outIndex = s * channels + channelIndex;
-            highChunk[outIndex] = (uint16_t) round((filteredHigh[s][channelIndex] / 0.195f) + 32768);
-        }
-
-        float threshold = hoops[channelIndex].threshold;
-        bool useHoops = (hoops[channelIndex].useHoops == 1) ? true : false;
-        int32_t snippetIndex = 0;
 
         // Across this block, look for any valid rectangle and look back to this block and the previous block to
         // determine valid t0. Add earliest t0 for each rectangle to 'spike' output.
@@ -399,15 +310,15 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
 
             if (threshold >= 0) {  // If threshold was positive:
                 if (threshS >= 0) {
-                    if (filteredHigh[threshS][channelIndex] > threshold) surpassed = true;
+                    if (filteredHigh[threshS] > threshold) surpassed = true;
                 } else {
-                    if (prevHighFloat[SnippetSize + threshS][channelIndex] > threshold) surpassed = true;
+                    if (prevHighFloat[SnippetSize + threshS] > threshold) surpassed = true;
                 }
             } else {  // If threshold was negative:
                 if (threshS >= 0) {
-                    if (filteredHigh[threshS][channelIndex] < threshold) surpassed = true;
+                    if (filteredHigh[threshS] < threshold) surpassed = true;
                 } else {
-                    if (prevHighFloat[SnippetSize + threshS][channelIndex] < threshold) surpassed = true;
+                    if (prevHighFloat[SnippetSize + threshS] < threshold) surpassed = true;
                 }
             }
 
@@ -418,9 +329,9 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
                 for (int i = 0; i < SnippetSize; ++i) {
                     int thisS = threshS + i;
                     if (thisS < 0) {
-                        thisSnippet[i] = prevHighFloat[SnippetSize + thisS][channelIndex];
+                        thisSnippet[i] = prevHighFloat[SnippetSize + thisS];
                     } else {
-                        thisSnippet[i] = filteredHigh[thisS][channelIndex];
+                        thisSnippet[i] = filteredHigh[thisS];
                     }
                 }
 
@@ -594,6 +505,38 @@ void CPUInterface::processDataBlock(uint16_t * data, uint16_t *lowChunk, uint16_
                 }
             }
         }
+
+        for (s = 0; s < FramesPerBlock; ++s) {
+            // Boundary check to make sure result will fit in a uint16_t.
+            if (wideFloat[s] > 6389.0f) wideFloat[s] = 6389.0f;
+            else if (wideFloat[s] < -6389.0f) wideFloat[s] = -6389.0f;
+
+            if (filteredLow[s] > 6389.0f) filteredLow[s] = 6389.0f;
+            else if (filteredLow[s] < -6389.0f) filteredLow[s] = -6389.0f;
+
+            if (filteredHigh[s] > 6389.0f) filteredHigh[s] = 6389.0f;
+            else if (filteredHigh[s] < -6389.0f) filteredHigh[s] = -6389.0f;
+
+            // (4) Convert outputs to uint16_t.
+            outIndex = s * channels + channelIndex;
+
+            lowChunk[outIndex] = (uint16_t) round((filteredLow[s] / 0.195f) + 32768);
+            wideChunk[outIndex] = (uint16_t) round((wideFloat[s] / 0.195f) + 32768);
+            highChunk[outIndex] = (uint16_t) round((filteredHigh[s] / 0.195f) + 32768);
+        }
+
+        // Update 'prevLast2' array with this block's samples.
+        for (int filterIndex = 0; filterIndex < 4; ++filterIndex) {
+            prevLast2[low2ndToLastIndex[filterIndex]] = lowFloat[filterIndex][FramesPerBlock - 2];
+            prevLast2[lowLastIndex[filterIndex]] = lowFloat[filterIndex][FramesPerBlock - 1];
+            prevLast2[high2ndToLastIndex[filterIndex]] = highFloat[filterIndex][FramesPerBlock - 2];
+            prevLast2[highLastIndex[filterIndex]] = highFloat[filterIndex][FramesPerBlock - 1];
+        }
+
+        prevLast2[in2ndToLastIndex] = inFloat[FramesPerBlock - 2];
+        prevLast2[inLastIndex] = inFloat[FramesPerBlock - 1];
+        prevLast2[wide2ndToLastIndex] = wideFloat[FramesPerBlock - 2];
+        prevLast2[wideLastIndex] = wideFloat[FramesPerBlock - 1];
     }
 
     // Set the last 50 samples of high to parsedPrevHigh so that they can be used in the next data block
@@ -683,8 +626,6 @@ void CPUInterface::initializeMemory()
     inputIndex = 0;
     outputIndex = 0;
     spikeIndex = 0;
-
-    blankSample = 0; //---
 
     allocated = true;
 }

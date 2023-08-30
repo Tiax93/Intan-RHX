@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -53,14 +53,14 @@
 #include "spectrogramdialog.h"
 #include "spikesortingdialog.h"
 
-class ControlPanel;
+class AbstractPanel;
 
 class ControllerInterface : public QObject
 {
     Q_OBJECT
 public:
     ControllerInterface(SystemState* state_, AbstractRHXController* rhxController_, const QString& boardSerialNumber, bool useOpenCL,
-                        DataFileReader* dataFileReader_ = nullptr, QObject* parent = nullptr);
+                        DataFileReader* dataFileReader_ = nullptr, QObject* parent = nullptr, bool is7310_ = false);
     ~ControllerInterface();
 
     void rescanPorts(bool updateDisplay = false);
@@ -84,7 +84,7 @@ public:
     bool fastForwardPossible() const { return currentSweepPosition < 0; }
 
     void setDisplay(MultiColumnDisplay* display_) { display = display_; }
-    void setControlPanel(ControlPanel* controlPanel_) { controlPanel = controlPanel_; }
+    void setControlPanel(AbstractPanel* controlPanel_) { controlPanel = controlPanel_; }
     void setISIDialog(ISIDialog* isiDialog_) { isiDialog = isiDialog_; }
     void setPSTHDialog(PSTHDialog* psthDialog_) { psthDialog = psthDialog_; }
     void setSpectrogramDialog(SpectrogramDialog* spectrogramDialog_) { spectrogramDialog = spectrogramDialog_; }
@@ -140,6 +140,8 @@ public:
     void uploadAmpSettleSettings();
     void uploadChargeRecoverySettings();
     void uploadBandwidthSettings();
+    void uploadAutoStimParameters(int stream);
+    void clearStimParameters(int stream);
     void uploadStimParameters(Channel* channel);
     void uploadStimParameters();
 
@@ -173,6 +175,7 @@ private:
     void addPlaybackHeadstageChannels();
 
     void sendTCPError(QString errorMessage);
+    void pipeReadErrorMessage(int errorID);
 
     SystemState* state;
     AbstractRHXController* rhxController;
@@ -187,7 +190,7 @@ private:
     WaveformProcessorThread* waveformProcessorThread;
 
     MultiColumnDisplay* display;
-    ControlPanel* controlPanel;
+    AbstractPanel* controlPanel;
     ISIDialog* isiDialog;
     PSTHDialog* psthDialog;
     SpectrogramDialog* spectrogramDialog;
@@ -206,6 +209,8 @@ private:
     double hardwareFifoPercentFull;
     double waveformProcessorCpuLoad;
     vector<double> cpuLoadHistory;
+
+    bool is7310;
 
     void outOfMemoryError(double memRequiredGB);
 };

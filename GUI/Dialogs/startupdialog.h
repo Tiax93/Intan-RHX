@@ -1,9 +1,9 @@
 //------------------------------------------------------------------------------
 //
 //  Intan Technologies RHX Data Acquisition Software
-//  Version 3.1.0
+//  Version 3.3.0
 //
-//  Copyright (c) 2020-2022 Intan Technologies
+//  Copyright (c) 2020-2023 Intan Technologies
 //
 //  This file is part of the Intan Technologies RHX Data Acquisition Software.
 //
@@ -45,7 +45,7 @@ class StartupDialog : public QDialog
     Q_OBJECT
 public:
     explicit StartupDialog(ControllerType controllerType_, AmplifierSampleRate* sampleRate_, StimStepSize* stimStepSize_,
-                           bool* rememberSettings_, bool askToRememberSettings, QWidget *parent = nullptr);
+                           bool* rememberSettings_, bool askToRememberSettings, bool testMode, QWidget *parent = nullptr);
 
 protected:
     void closeEvent(QCloseEvent *) override;
